@@ -1,0 +1,75 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Web server for LAMP Stack.
+Parameters:
+  KeyName:
+    Description: Key Pair name
+    Type: AWS::EC2::KeyPair::KeyName
+  #VPC:
+  #Description: VPC to launch Web server in
+  #Type: AWS::EC2::VPC::Id
+  Subnet:
+    Description: subnet to launch Web server in
+    Type: AWS::EC2::Subnet::Id 
+Mappings:
+  RegionAMIMap:
+    us-east-1:
+      AmazonLinux: ami-97785bed
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionAMIMap, !Ref 'AWS::Region', AmazonLinux]
+      InstanceType: t2.micro
+      SubnetId: !Ref Subnet
+      KeyName: !Ref KeyName
+      SecurityGroupIds: 
+      - !Ref InstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: Webserver1
+      UserData:
+        Fn::Base64: !Sub |     # No more Fn::Join needed
+          #!/bin/bash
+          yum install -y stress
+
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: 'vpc-3cfdd244'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: LAMP_SG
+  ElasticLoadBalancer:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      AvailabilityZones: !GetAZs ''
+      CrossZone: 'true'
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '30'
+        Timeout: '5'
+      Tags:
+        - Key: Name
+          Value: LAMP_ELB
+  

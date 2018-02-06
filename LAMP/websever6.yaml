@@ -1,0 +1,393 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Web server for LAMP Stack.
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'EC2 Parameters'
+      Parameters:
+      - KeyName
+      - Subnet
+      - InstanceType
+    - Label:
+        default: 'RDS Parameters'
+      Parameters:
+      - DBName
+      - DBUser
+      - DBPassword
+      - DBAllocatedStorage
+      - DBInstanceClass
+      - EC2SecurityGroup
+      - MultiAZ
+      - ReadReplica
+      - DBSubnet
+Parameters:
+  KeyName:
+    Description: Key Pair name
+    Type: AWS::EC2::KeyPair::KeyName
+  #VPC:
+  #Description: VPC to launch Web server in
+  #Type: AWS::EC2::VPC::Id
+  Subnet:
+    Description: subnet to launch Web server in
+    Type: AWS::EC2::Subnet::Id
+  DBSubnet:
+    Description: subnet to launch Web server in
+    Type: AWS::EC2::Subnet::Id
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t1.micro
+    AllowedValues:
+    - t1.micro
+    - t2.micro
+    - m1.small
+    - m1.medium
+    - m1.large
+    - m1.xlarge
+    - m2.xlarge
+    - m2.2xlarge
+    - m2.4xlarge
+    - m3.xlarge
+    - m3.2xlarge
+    - c1.medium
+    - c1.xlarge
+    - cc1.4xlarge
+    - cc2.8xlarge
+    - cg1.4xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  DBName:
+    Default: MyDatabase
+    Description: The database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+  DBUser:
+    NoEcho: 'true'
+    Description: The database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+  DBPassword:
+    NoEcho: 'true'
+    Description: The database admin account password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: "[a-zA-Z0-9]*"
+    ConstraintDescription: must contain only alphanumeric characters.
+  DBAllocatedStorage:
+    Default: '5'
+    Description: The size of the database (Gb)
+    Type: Number
+    MinValue: '5'
+    MaxValue: '1024'
+    ConstraintDescription: must be between 5 and 1024Gb.
+  DBInstanceClass:
+    Default: db.m1.small
+    Description: The database instance type
+    Type: String
+    AllowedValues:
+    - db.t1.micro
+    - db.m1.small
+    - db.m1.medium
+    - db.m1.large
+    - db.m1.xlarge
+    - db.m2.xlarge
+    - db.m2.2xlarge
+    - db.m2.4xlarge
+    - db.cr1.8xlarge
+    ConstraintDescription: must select a valid database instance type.
+  #EC2SecurityGroup:
+  #  Default: 'default'
+  #  Description: The EC2 security group that contains instances that need access to
+  #    the database
+  #  Type: String
+  MultiAZ:
+    Description: Multi-AZ master database
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'true'
+    - 'false'
+    ConstraintDescription: must be true or false.
+  ReadReplica:
+    Description: Create a read replica
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'true'
+    - 'false'
+    ConstraintDescription: must be true or false.
+Conditions:
+  CreateReadReplica:
+    Fn::Equals:
+    - Ref: ReadReplica
+    - 'true'
+Mappings:
+  AWSInstanceType2Arch:
+    t1.micro:
+      Arch: '64'
+    m1.small:
+      Arch: '64'
+    m1.medium:
+      Arch: '64'
+    m1.large:
+      Arch: '64'
+    m1.xlarge:
+      Arch: '64'
+    m2.xlarge:
+      Arch: '64'
+    m2.2xlarge:
+      Arch: '64'
+    m2.4xlarge:
+      Arch: '64'
+    m3.xlarge:
+      Arch: '64'
+    m3.2xlarge:
+      Arch: '64'
+    c1.medium:
+      Arch: '64'
+    c1.xlarge:
+      Arch: '64'
+  AWSRegionArch2AMI:
+    us-east-1:
+      '32': ami-aba768c2
+      '64': ami-81a768e8
+    us-west-1:
+      '32': ami-458fd300
+      '64': ami-b18ed2f4
+    us-west-2:
+      '32': ami-fcff72cc
+      '64': ami-feff72ce
+    eu-west-1:
+      '32': ami-018bb975
+      '64': ami-998bb9ed
+    sa-east-1:
+      '32': ami-a039e6bd
+      '64': ami-a239e6bf
+    ap-southeast-1:
+      '32': ami-425a2010
+      '64': ami-5e5a200c
+    ap-southeast-2:
+      '32': ami-b3990e89
+      '64': ami-bd990e87
+    ap-northeast-1:
+      '32': ami-7871c579
+      '64': ami-7671c577
+Resources:
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: 'vpc-453fd63e'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: LAMP_SG
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      KeyName:
+        Ref: KeyName
+      ImageId:
+        Fn::FindInMap:
+        - AWSRegionArch2AMI
+        - Ref: AWS::Region
+        - Fn::FindInMap:
+          - AWSInstanceType2Arch
+          - Ref: InstanceType
+          - Arch
+      UserData:
+        Fn::Base64:
+          #!/bin/bash
+          yum install -y stress
+      SecurityGroups:
+      - Ref: InstanceSecurityGroup
+      InstanceType:
+        Ref: InstanceType
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      LoadBalancerNames:
+      - !Ref ElasticLoadBalancer
+      AvailabilityZones:
+        Fn::GetAZs: ''
+      LaunchConfigurationName: 
+        Ref: LaunchConfig
+      MinSize: 1
+      MaxSize: 3
+      Cooldown: 60
+      Tags:
+      - PropagateAtLaunch: true
+        Value: wordpress
+        Key: Name
+  CPUTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
+      Namespace: 'AWS/EC2'
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 80
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+  ScalingUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      MinAdjustmentStep: 1
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      Cooldown: 900
+      ScalingAdjustment: 25
+  CPUHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: 1
+      Statistic: Average
+      Threshold: 60
+      AlarmDescription: 'Alarm if CPU load is high.'
+      Period: 300
+      AlarmActions:
+      - !Ref ScalingUpPolicy
+      Namespace: 'AWS/EC2'
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+  ScalingDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      MinAdjustmentStep: 1
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      Cooldown: 300
+      ScalingAdjustment: -25
+  CPULowAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: 3
+      Statistic: Average
+      Threshold: 30
+      AlarmDescription: 'Alarm if CPU load is low.'
+      Period: 300
+      AlarmActions:
+      - !Ref ScalingDownPolicy
+      Namespace: 'AWS/EC2'
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
+      ComparisonOperator: LessThanThreshold
+  ElasticLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancing::LoadBalancer'
+    Properties:
+      AvailabilityZones: !GetAZs ''
+      CrossZone: 'true'
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: TCP:22
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '30'
+        Timeout: '5'
+      Tags:
+        - Key: Name
+          Value: LAMP_ELB
+  MasterDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName:
+        Ref: DBName
+      DBSubnet:
+        Ref: DBSubnet
+      AllocatedStorage:
+        Ref: DBAllocatedStorage
+      DBInstanceClass:
+        Ref: DBInstanceClass
+      Engine: MySQL
+      EngineVersion: '5.6'
+      DBSecurityGroups:
+      - Ref: DBSecurityGroup
+      MasterUsername:
+        Ref: DBUser
+      MasterUserPassword:
+        Ref: DBPassword
+      MultiAZ:
+        Ref: MultiAZ
+      Tags:
+      - Key: Name
+        Value: Master Database
+    DeletionPolicy: Snapshot
+  DBSecurityGroup:
+    Type: AWS::RDS::DBSecurityGroup
+    Properties:
+      GroupDescription: Allow Client to DB
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: DB_SG
+      GroupDescription: database access
+  ReplicaDB:
+    Type: AWS::RDS::DBInstance
+    Condition: CreateReadReplica
+    Properties:
+      SourceDBInstanceIdentifier:
+        Ref: MasterDB
+      DBInstanceClass:
+        Ref: DBInstanceClass
+      Tags:
+      - Key: Name
+        Value: Read Replica Database
+Outputs:
+  MasterJDBCConnectionString:
+    Description: JDBC connection string for the master database
+    Value:
+      Fn::Join:
+      - ''
+      - - jdbc:mysql://
+        - Fn::GetAtt:
+          - MasterDB
+          - Endpoint.Address
+        - ":"
+        - Fn::GetAtt:
+          - MasterDB
+          - Endpoint.Port
+        - "/"
+        - Ref: DBName

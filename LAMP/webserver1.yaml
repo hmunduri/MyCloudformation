@@ -1,0 +1,65 @@
+AutoScalingGroup: 
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - LaunchConfiguration
+
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    DependsOn:
+      - AutoScalingGroup
+      - ScaleUpPolicy
+    Properties:
+      AlarmDescription: Scale-up if CPU > 60% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '60'
+      AlarmActions:
+      - Ref: ScaleUpPolicy
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value:
+          Ref: AutoScalingGroup
+      ComparisonOperator: GreaterThanThreshold
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    DependsOn:
+      - AutoScalingGroup
+      - ScaleDownPolicy
+    Properties:
+      AlarmDescription: Scale-down if CPU < 30% for 10 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: '300'
+      EvaluationPeriods: '2'
+      Threshold: '30'
+      AlarmActions:
+      - Ref: ScaleDownPolicy
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value:
+          Ref: AutoScalingGroup
+      ComparisonOperator: LessThanThreshold
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    DependsOn:
+      - AutoScalingGroup
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName:
+        Ref: AutoScalingGroup
+      Cooldown: 300
+      ScalingAdjustment: '1'
+    ScaleDownPolicy:
+      Type: AWS::AutoScaling::ScalingPolicy
+      DependsOn:
+        - AutoScalingGroup
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName:
+        Ref: AutoScalingGroup
+      Cooldown: 1800
+      ScalingAdjustment: "-1"
