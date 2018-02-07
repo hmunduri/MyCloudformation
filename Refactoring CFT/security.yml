@@ -1,0 +1,15 @@
+  BuildsSecurityGroup: 
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enable communication build class instances"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: 
+      - IpProtocol: tcp
+        FromPort: 3389
+        ToPort: 3389
+        CidrIp: 0.0.0.0/0
+      Tags: 
+      - Key: Name 
+        Value: !Sub ${EnvironmentName} Build Server Security Group
+      - Key: StackName 
+        Value: !Ref AWS::StackName
