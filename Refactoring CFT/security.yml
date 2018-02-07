@@ -1,15 +1,23 @@
+  # This is the security group for MYSQL and SSH
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
   BuildsSecurityGroup: 
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Enable communication build class instances"
-      VpcId: !Ref VpcId
+      GroupDescription: "Enable communication SSH and MYSQL"
+      VpcId: vpc-xxxxxxx
       SecurityGroupIngress: 
       - IpProtocol: tcp
-        FromPort: 3389
-        ToPort: 3389
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '3306'
+        ToPort: '3306'
         CidrIp: 0.0.0.0/0
       Tags: 
       - Key: Name 
-        Value: !Sub ${EnvironmentName} Build Server Security Group
-      - Key: StackName 
-        Value: !Ref AWS::StackName
+        Value: SSH Security Group
+      - Key: Owner 
+        Value: sunilcricket64@gmail.com
