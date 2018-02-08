@@ -1,0 +1,227 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Application Servers .
+Mappings:
+  params:
+    SecurityGroups:
+      DEV:
+      - sg-xxxxx
+      QA:
+      - sg-xxxxxx
+      STG:
+      - sg-xxxxxx
+      - sg-xxxxxx
+      PROD:
+      - sg-xxxxxx
+    SubnetId:
+      DEV: 
+      - subnet-xxxxxx
+      QA:   
+      - subnet-xxxxx
+      STG:  
+      - subnet-xxxxx
+      PROD: 
+      - subnet-xxxxx
+    AvailabilityZone:
+      DEV:  
+      - us-west-2a 
+      QA:   
+      - us-west-2c
+      STG:  
+      - us-west-2b
+      PROD: 
+      - us-west-2b
+    OwnerContacts:
+      DEV:  sunilcricket64@gmail.com
+      QA:   sunilcricket64@gmail.com
+      STG:  sunilcricket64@gmail.com
+      PROD: sunilcricket64@gmail.com
+    ApplicationName:
+      DEV:  Lamp Stack
+      QA:   Lamp Stack
+      STG:  Lamp Stack
+      PROD: Lamp Stack
+    IAMRole:
+      DEV:  Create IAM Role give a name here
+      QA:   Create IAM Role give a name here
+      STG:  Create IAM Role give a name here
+      PROD: Create IAM Role give a name here
+    Environment:
+      DEV:  DEV
+      QA:   QA
+      STG:  STG
+      PROD: PROD
+    Uptime:
+      DEV:  24*7
+      QA:   24*7
+      STG:  24*7
+      PROD: 24*7
+    Keypair:
+      DEV:  ansible-jenkins
+      QA:   devops.pem
+      STG:  devops.pem
+      PROD: devops.pem
+    Loadalancer:
+      DEV:  
+      - LampStack-ELB
+      QA:   LampStack-ELB
+      STG:  LampStack-ELB
+      PROD: LampStack-ELB
+Parameters:
+  Environment:
+    Description: Environment
+    Type: String
+    Default: DEV
+    AllowedValues:
+    - DEV
+    - QA
+    - STG
+    - PROD
+  ImageId:
+    Default: ami-7f74cc07
+    Description: Linux AMI Image Id
+    Type: String
+  InstanceType:
+    AllowedValues:
+    - t2.micro
+    - t2.medium
+    - t2.large
+    - t2.2xlarge
+    Default: t2.micro
+    Description: Size of the Instance
+    Type: String
+  Region:
+    AllowedValues:
+    - USEast
+    - USWest
+    Default: USWest
+    Description: What Region will you be building in?
+    Type: String
+Resources:
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      SecurityGroups:
+        Fn::FindInMap: [ params, SecurityGroups, !Ref "Environment"]
+      IamInstanceProfile:
+        Fn::FindInMap: [ params, IAMRole, !Ref "Environment"]
+      KeyName:
+        Fn::FindInMap: [ params, Keypair, !Ref "Environment"]
+      ImageId:
+        Ref: ImageId
+      InstanceType:
+        Ref: InstanceType
+  AutoScalingGroup:
+      Type: 'AWS::AutoScaling::AutoScalingGroup' 
+      Properties:
+        LoadBalancerNames:
+          Fn::FindInMap: [ params, Loadalancer, !Ref "Environment"]
+        AvailabilityZones:
+          Fn::FindInMap: [ params, AvailabilityZone, !Ref "Environment"]
+        VPCZoneIdentifier:
+          Fn::FindInMap: [ params, SubnetId, !Ref "Environment"]
+        LaunchConfigurationName:
+          Ref: LaunchConfig
+        MinSize: 1
+        MaxSize: 3
+        Cooldown: 60
+        Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: LampStack 
+        - Key: OwnerContact
+          Value:
+            Fn::FindInMap: [ params, OwnerContacts, !Ref "Environment" ]
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value:
+            Fn::FindInMap: [ params, Environment, !Ref "Environment" ]
+          PropagateAtLaunch: true
+        - Key: ApplicationName
+          Value:
+            Fn::FindInMap: [ params, ApplicationName, !Ref "Environment" ]
+          PropagateAtLaunch: true
+        - Key: Uptime
+          Value:
+            Fn::FindInMap: [ params, Uptime, !Ref "Environment" ]
+          PropagateAtLaunch: true
+  CPUTooHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Average CPU utilization over last 10 minutes higher than 80%'
+      Namespace: 'AWS/EC2'
+      MetricName: CPUUtilization
+      Statistic: Average
+      Period: 600
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 80
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+  ScalingUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      MinAdjustmentStep: 1
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      Cooldown: 900
+      ScalingAdjustment: 25
+  CPUHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: 1
+      Statistic: Average
+      Threshold: 60
+      AlarmDescription: 'Alarm if CPU load is high.'
+      Period: 300
+      AlarmActions:
+      - !Ref ScalingUpPolicy
+      Namespace: 'AWS/EC2'
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+  ScalingDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      MinAdjustmentStep: 1
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      Cooldown: 300
+      ScalingAdjustment: -25
+  CPULowAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: 3
+      Statistic: Average
+      Threshold: 30
+      AlarmDescription: 'Alarm if CPU load is low.'
+      Period: 300
+      AlarmActions:
+      - !Ref ScalingDownPolicy
+      Namespace: 'AWS/EC2'
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
+      ComparisonOperator: LessThanThreshold
+  IPAddress:
+    Type: AWS::EC2::EIP
+  IPAssoc:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: 
+        Ref: LaunchConfig
+      EIP:
+        Ref: IPAddress
+
+     
+
+
+
+
+
+
