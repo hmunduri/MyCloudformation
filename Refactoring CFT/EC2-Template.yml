@@ -32,10 +32,10 @@ Mappings:
       PROD: 
       - us-west-2b
     OwnerContacts:
-      DEV:  sunilcricket64@gmail.com
-      QA:   sunilcricket64@gmail.com
-      STG:  sunilcricket64@gmail.com
-      PROD: sunilcricket64@gmail.com
+      DEV:  email@localhost
+      QA:   email@localhost
+      STG:  email@localhost
+      PROD: email@localhost
     ApplicationName:
       DEV:  Lamp Stack
       QA:   Lamp Stack
